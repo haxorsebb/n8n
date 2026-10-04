@@ -1,14 +1,20 @@
-ARG NODE_VERSION=26.12.1
+ARG NODE_VERSION=26.5.1
 ARG N8N_VERSION=snapshot
 
-# The digest pins node:26.12.1-alpine3.24 for amd64 and arm64. Change the tag and the digest together.
-ARG BUILDER_IMAGE=node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
-ARG RUNTIME_IMAGE=n8nio/base:26.12.1@sha256:435e5310b29cfa5880b5512703f7d10bafcf0f5dd700c7adac6ee8cfbe77306a
+# Pinned Debian builder and appliance runtime must use the same Node.js version.
+ARG BUILDER_IMAGE=dhi.io/node:26.5.1-debian13-dev@sha256:e85d8561e099d495fc29b118bb2f12d60e226c2faffa2f0b5b8fce8f99a81730
+ARG RUNTIME_IMAGE=ghcr.io/haxorsebb/n8n-base:26.5.1-system-auth-898e21fa0c07@sha256:56660e757680b4eb017b419d39798f36747aa5777d70547c4776e79e4c27ff64
 
 # The runtime base has no compiler, so this stage supplies one.
 FROM ${BUILDER_IMAGE} AS toolchain
-RUN apk add --no-cache python3 make g++
-ENV NODE_GYP=/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        g++ librdkafka-dev make python3 \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
+ && NODE_GYP="$(find /usr/lib/nodejs/npm -path '*/node-gyp/bin/node-gyp.js' -print -quit)" \
+ && test -n "$NODE_GYP" \
+ && ln -s "$NODE_GYP" /usr/local/bin/appliance-node-gyp
+ENV NODE_GYP=/usr/local/bin/appliance-node-gyp
 
 # Compile the native modules above `COPY ./compiled`. An application change
 # then does not start a new compile.
@@ -17,8 +23,7 @@ FROM toolchain AS native-builder
 # These paths are pnpm symlinks. Copying through them uses the resolved version.
 COPY ./compiled/node_modules/.pnpm/isolated-vm@*/node_modules/isolated-vm /build/isolated-vm
 WORKDIR /build/isolated-vm
-# node-gyp-build reads /etc/alpine-release to find musl. DHI Alpine does not
-# have that file, so the loader uses the glibc prebuild and crashes.
+# Rebuild against the Debian/glibc runtime ABI, not bundled prebuilds.
 RUN rm -rf prebuilds && node "$NODE_GYP" rebuild --release -j max
 
 # sqlite3 needs node-addon-api for the headers, and `tar` because a gyp action
@@ -38,7 +43,7 @@ RUN node "$NODE_GYP" rebuild --release
 # Confluent has no prebuild for the Node version that CI installs, so
 # `./compiled` has none. Compile it here against the base image librdkafka.
 # See https://github.com/confluentinc/confluent-kafka-javascript/issues/397
-RUN apk add --no-cache librdkafka-dev
+# librdkafka-dev is installed in the Debian toolchain stage.
 COPY ./compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/nan /build/node_modules/nan
 COPY ./compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/@confluentinc/kafka-javascript /build/node_modules/@confluentinc/kafka-javascript
 WORKDIR /build/node_modules/@confluentinc/kafka-javascript
