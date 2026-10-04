@@ -16,7 +16,7 @@ import { useSSOStore } from '@/features/settings/sso/sso.store';
 
 import type { IFormBoxConfig } from '@/Interface';
 import { MFA_AUTHENTICATION_REQUIRED_ERROR_CODE, VIEWS, MFA_FORM } from '@/app/constants';
-import type { LoginRequestDto } from '@n8n/api-types';
+import { AuthenticationMethod, type LoginRequestDto } from '@n8n/api-types';
 import { SSO_ERROR_ACCESS_DENIED, SSO_ERROR_QUERY_PARAM } from '@n8n/api-types';
 
 export type EmailOrLdapLoginIdAndPassword = Pick<
@@ -84,7 +84,14 @@ onUnmounted(() => {
 
 const ldapLoginLabel = computed(() => ssoStore.ldapLoginLabel);
 const isLdapLoginEnabled = computed(() => ssoStore.isLdapLoginEnabled);
+const isSystemLoginEnabled = computed(
+	() => settingsStore.userManagement.authenticationMethod === AuthenticationMethod.System,
+);
 const emailLabel = computed(() => {
+	if (isSystemLoginEnabled.value) {
+		return locale.baseText('auth.username');
+	}
+
 	let label = locale.baseText('auth.email');
 	if (isLdapLoginEnabled.value && ldapLoginLabel.value) {
 		label = ldapLoginLabel.value;
@@ -102,12 +109,13 @@ const formConfig: IFormBoxConfig = reactive({
 			name: 'emailOrLdapLoginId',
 			properties: {
 				label: emailLabel.value,
-				type: 'email',
+				type: isSystemLoginEnabled.value ? 'text' : 'email',
 				required: true,
-				...(!isLdapLoginEnabled.value && { validationRules: [{ name: 'VALID_EMAIL' }] }),
+				...(!isLdapLoginEnabled.value &&
+					!isSystemLoginEnabled.value && { validationRules: [{ name: 'VALID_EMAIL' }] }),
 				showRequiredAsterisk: false,
 				validateOnBlur: false,
-				autocomplete: 'email',
+				autocomplete: isSystemLoginEnabled.value ? 'username' : 'email',
 				capitalize: true,
 				focusInitially: true,
 			},

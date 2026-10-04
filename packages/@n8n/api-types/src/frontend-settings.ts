@@ -34,6 +34,7 @@ export const AuthenticationMethod = {
 	Ldap: 'ldap',
 	Saml: 'saml',
 	Oidc: 'oidc',
+	System: 'system',
 	TokenExchange: 'token-exchange',
 } as const;
 

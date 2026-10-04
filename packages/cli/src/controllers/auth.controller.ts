@@ -34,6 +34,7 @@ import {
 	isSsoCurrentAuthenticationMethod,
 } from '@/sso.ee/sso-helpers';
 import '../auth/handlers/email.auth-handler';
+import '../auth/handlers/system.auth-handler';
 
 @RestController()
 export class AuthController {
@@ -80,7 +81,10 @@ export class AuthController {
 			throw new InternalServerError('Email authentication method not available');
 		}
 
-		const preliminaryUser = await emailHandler.handleLogin(emailOrLdapLoginId, password);
+		const preliminaryUser =
+			currentAuthenticationMethod === 'system'
+				? undefined
+				: await emailHandler.handleLogin(emailOrLdapLoginId, password);
 		this.validateSsoRestrictions(preliminaryUser, emailOrLdapLoginId);
 
 		const { user, usedAuthenticationMethod } = await this.authenticateWithPassword(

@@ -224,6 +224,7 @@
 	"auth.defaultPasswordRequirements": "{minimum}+ characters, at least 1 number and 1 capital letter",
 	"auth.validation.missingParameters": "Missing token or user id",
 	"auth.email": "Email",
+	"auth.username": "Username",
 	"auth.firstName": "First Name",
 	"auth.lastName": "Last Name",
 	"auth.newPassword": "New password",
