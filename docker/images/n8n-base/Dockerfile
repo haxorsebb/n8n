@@ -1,39 +1,49 @@
-# CI passes one DHI reference per published Node version (see the matrix in
-# build-base-image.yml). The default keeps plain `docker build` working.
-ARG DHI_REF=dhi.io/node:24.18.1-alpine3.24-dev@sha256:074b5aa92e1ce74cd575214211bbcb8d1550710aec59558da734a67d84d31679
-FROM ${DHI_REF}
+# syntax=docker/dockerfile:1.7
 
-# Install all dependencies in a single layer to minimize image size
-RUN apk add --no-cache busybox-binsh && \
-    # Install fonts
-    apk --no-cache add --virtual .build-deps-fonts msttcorefonts-installer fontconfig && \
-    update-ms-fonts && \
-    fc-cache -f && \
-    apk del .build-deps-fonts && \
-    find /usr/share/fonts/truetype/msttcorefonts/ -type l -exec unlink {} \; && \
-    # Install OS dependencies. No blanket `apk upgrade` — it floats the whole
-    # world off the Alpine repos at build time and defeats the pinned base;
-    # patched bytes come from bumping the pinned DHI digest instead. git and
-    # openssl omitted: the base already provides git and the libssl3/libcrypto3
-    # libs Node uses (the openssl CLI binary isn't needed at runtime).
-    apk add --no-cache \
-        openssh \
+ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13-66f5d6635e17@sha256:5c60166ad2daa94f48f9af120fdbcba11cc7e7759f857b5237fc4ecf258d69de
+ARG NODE_DONOR_IMAGE=dhi.io/node:26.5.1-debian13-dev@sha256:e85d8561e099d495fc29b118bb2f12d60e226c2faffa2f0b5b8fce8f99a81730
+
+FROM ${NODE_DONOR_IMAGE} AS node-donor
+
+FROM ${APP_BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# n8n-specific runtime dependencies. The common PAM/NSS/SSSD substrate is
+# inherited from the appliance application base above.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        fontconfig \
+        fonts-liberation \
+        git \
         graphicsmagick \
+        libgcc-s1 \
+        librdkafka1 \
+        libstdc++6 \
+        openssh-client \
+        pamtester \
         tini \
-        tzdata \
-        ca-certificates \
-        libc6-compat \
-        librdkafka && \
-    # Cleanup
-    rm -rf /tmp/* /root/.npm /root/.cache/node /opt/yarn* && \
-    apk del apk-tools
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Alpine 3.24 ships node at /usr/bin; symlink it to /usr/local/bin so the path
-# matches what the cloud launch and AppArmor profile expect.
-RUN mkdir -p /usr/local/bin && ln -sf /usr/bin/node /usr/local/bin/node
+# Carry only the Node runtime into the final image. npm/corepack remain build-time
+# tools in the DHI Node builder stages and are intentionally absent at runtime.
+COPY --from=node-donor /usr/bin/node /usr/bin/node
+
+# Preserve the established n8n service identity without adding account-management
+# tooling to the runtime image.
+RUN printf '%s\n' \
+        'node:x:1000:1000:node:/home/node:/bin/sh' \
+        >> /etc/passwd \
+ && printf '%s\n' \
+        'node:x:1000:node' \
+        >> /etc/group \
+ && mkdir -p /home/node /usr/local/bin \
+ && chown 1000:1000 /home/node \
+ && ln -s /usr/bin/node /usr/local/bin/node \
+ && printf '%s\n' \
+        'auth required pam_sss.so' \
+        'account required pam_sss.so' \
+        > /etc/pam.d/n8n
 
 WORKDIR /home/node
-# This base image installs global npm modules under /usr/local; set NODE_PATH
-# so packages added via `npm install -g` are require()-able at runtime.
-ENV NODE_PATH=/usr/local/lib/node_modules
 EXPOSE 5678/tcp
