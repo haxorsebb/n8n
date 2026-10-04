@@ -106,7 +106,6 @@ export class SystemAuthHandler implements IPasswordAuthHandler<User> {
 	private async createSystemUser(username: string, isAdmin: boolean): Promise<User | undefined> {
 		const role = isAdmin ? GLOBAL_ADMIN_ROLE : GLOBAL_MEMBER_ROLE;
 		const { user } = await this.userRepository.createUserWithProject({
-			email: null,
 			password: null,
 			role: { slug: role.slug },
 		});
