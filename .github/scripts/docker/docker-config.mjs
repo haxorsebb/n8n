@@ -88,11 +88,16 @@ class BuildContext {
 			.substring(0, 128);
 	}
 
-	buildMatrix(platforms) {
-		const runners = {
+	buildMatrix(platforms, event = process.env.GITHUB_EVENT_NAME) {
+		const blacksmithRunners = {
 			'linux/amd64': 'blacksmith-4vcpu-ubuntu-2204',
 			'linux/arm64': 'blacksmith-8vcpu-ubuntu-2204-arm',
 		};
+		const githubHostedRunners = {
+			'linux/amd64': 'ubuntu-22.04',
+			'linux/arm64': 'ubuntu-24.04-arm',
+		};
+		const runners = event === 'workflow_dispatch' ? githubHostedRunners : blacksmithRunners;
 
 		const matrix = {
 			platform: [],
@@ -157,7 +162,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			includeArm64: getArg('include-arm64') === 'true',
 		});
 
-		const matrix = context.buildMatrix(result.platforms);
+		const matrix = context.buildMatrix(result.platforms, getArg('event') || process.env.GITHUB_EVENT_NAME);
 
 		// Debug output when GITHUB_OUTPUT is set (running in Actions)
 		if (context.githubOutput) {
