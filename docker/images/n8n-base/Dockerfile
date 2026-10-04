@@ -45,5 +45,7 @@ RUN printf '%s\n' \
         'account required pam_sss.so' \
         > /etc/pam.d/n8n
 
+ENV NODE_PATH=/usr/local/lib/node_modules
+
 WORKDIR /home/node
 EXPOSE 5678/tcp
