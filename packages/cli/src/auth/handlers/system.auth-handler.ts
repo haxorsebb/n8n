@@ -7,6 +7,7 @@ import {
 	GLOBAL_ADMIN_ROLE,
 	GLOBAL_MEMBER_ROLE,
 	GLOBAL_OWNER_ROLE,
+	SettingsRepository,
 	User,
 	UserRepository,
 } from '@n8n/db';
@@ -14,6 +15,7 @@ import type { IPasswordAuthHandler } from '@n8n/decorators';
 import { AuthHandler } from '@n8n/decorators';
 import { Constructable } from '@n8n/di';
 
+import config from '@/config';
 import {
 	getCurrentAuthenticationMethod,
 	setCurrentAuthenticationMethod,
@@ -35,6 +37,7 @@ export class SystemAuthHandler implements IPasswordAuthHandler<User> {
 	constructor(
 		private readonly userRepository: UserRepository,
 		private readonly authIdentityRepository: AuthIdentityRepository,
+		private readonly settingsRepository: SettingsRepository,
 	) {}
 
 	async init() {
@@ -43,6 +46,36 @@ export class SystemAuthHandler implements IPasswordAuthHandler<User> {
 		if (getCurrentAuthenticationMethod() !== 'system') {
 			await setCurrentAuthenticationMethod('system');
 		}
+
+		await this.claimSystemOwnerShell();
+	}
+
+	private async claimSystemOwnerShell() {
+		const owner = await this.userRepository.findOne({
+			where: { role: { slug: GLOBAL_OWNER_ROLE.slug } },
+			relations: ['role', 'authIdentities'],
+		});
+		if (!owner || owner.disabled) return;
+
+		if (!owner.lastActiveAt && owner.password === null) {
+			owner.lastActiveAt = new Date();
+			await this.userRepository.save(owner, { transaction: true });
+		}
+
+		const existingIdentity = owner.authIdentities.find(
+			(identity) => identity.providerType === 'system' && identity.providerId === this.ownerUsername,
+		);
+		if (!existingIdentity) {
+			await this.authIdentityRepository.save(
+				AuthIdentity.create(owner, this.ownerUsername, 'system'),
+			);
+		}
+
+		await this.settingsRepository.update(
+			{ key: 'userManagement.isInstanceOwnerSetUp' },
+			{ value: JSON.stringify(true) },
+		);
+		config.set('userManagement.isInstanceOwnerSetUp', true);
 	}
 
 	private async authenticatePam(username: string, password: string): Promise<boolean> {
