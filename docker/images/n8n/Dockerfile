@@ -30,7 +30,8 @@ RUN curl -fsSLo librdkafka.tar.gz \
  && tar -xzf librdkafka.tar.gz \
  && cd "librdkafka-${LIBRDKAFKA_VERSION}" \
  && ./configure --prefix=/opt/librdkafka \
- && make -j"$(nproc)" \
+ && make -C src -j"$(nproc)" \
+ && make -C src-cpp -j"$(nproc)" \
  && mkdir -p /opt/librdkafka/include/librdkafka /opt/librdkafka/lib/pkgconfig \
  && cp src/rdkafka.h src/rdkafka_mock.h /opt/librdkafka/include/librdkafka/ \
  && cp src/librdkafka.so.1 src-cpp/librdkafka++.so.1 /opt/librdkafka/lib/ \
