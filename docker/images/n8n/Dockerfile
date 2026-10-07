@@ -15,6 +15,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         g++ \
+        gzip \
         make \
         python3 \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
