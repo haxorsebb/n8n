@@ -33,7 +33,7 @@ RUN curl -fsSLo librdkafka.tar.gz \
  && make -C src -j"$(nproc)" \
  && make -C src-cpp -j"$(nproc)" \
  && mkdir -p /opt/librdkafka/include/librdkafka /opt/librdkafka/lib/pkgconfig \
- && cp src/rdkafka.h src/rdkafka_mock.h /opt/librdkafka/include/librdkafka/ \
+ && cp src/rdkafka.h src/rdkafka_mock.h src-cpp/rdkafkacpp.h /opt/librdkafka/include/librdkafka/ \
  && cp src/librdkafka.so.1 src-cpp/librdkafka++.so.1 /opt/librdkafka/lib/ \
  && ln -s librdkafka.so.1 /opt/librdkafka/lib/librdkafka.so \
  && ln -s librdkafka++.so.1 /opt/librdkafka/lib/librdkafka++.so \
@@ -70,7 +70,7 @@ RUN cd /usr/local/lib/node_modules/n8n/node_modules/.pnpm/@confluentinc+kafka-ja
  && NODE_GYP="$(find /usr/lib/nodejs/npm -path '*/node-gyp/bin/node-gyp.js' -print -quit)" \
  && test -n "$NODE_GYP" \
  && PKG_CONFIG_PATH=/opt/librdkafka/lib/pkgconfig \
-    CPPFLAGS="-I/opt/librdkafka/include" \
+    CPPFLAGS="-I/opt/librdkafka/include/librdkafka" \
     LDFLAGS="-L/opt/librdkafka/lib -Wl,-rpath,/usr/local/lib" \
     CKJS_LINKING=dynamic \
     BUILD_LIBRDKAFKA=0 \
