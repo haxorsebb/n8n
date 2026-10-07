@@ -31,7 +31,12 @@ RUN curl -fsSLo librdkafka.tar.gz \
  && cd "librdkafka-${LIBRDKAFKA_VERSION}" \
  && ./configure --prefix=/opt/librdkafka \
  && make -j"$(nproc)" \
- && make install
+ && mkdir -p /opt/librdkafka/include/librdkafka /opt/librdkafka/lib/pkgconfig \
+ && cp src/rdkafka.h src/rdkafka_mock.h /opt/librdkafka/include/librdkafka/ \
+ && cp src/librdkafka.so.1 src-cpp/librdkafka++.so.1 /opt/librdkafka/lib/ \
+ && ln -s librdkafka.so.1 /opt/librdkafka/lib/librdkafka.so \
+ && ln -s librdkafka++.so.1 /opt/librdkafka/lib/librdkafka++.so \
+ && cp src/rdkafka.pc src-cpp/rdkafka++.pc /opt/librdkafka/lib/pkgconfig/
 
 # Build isolated-vm in a separate stage. The only cache input is the module source.
 # Below `COPY ./compiled`, each application change starts a new compile.
