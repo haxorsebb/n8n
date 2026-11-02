@@ -32,7 +32,7 @@ export class SystemAuthHandler implements IPasswordAuthHandler<User> {
 	private readonly pamService = process.env.N8N_SYSTEM_AUTH_PAM_SERVICE ?? 'n8n';
 	private readonly userGroup = process.env.N8N_SYSTEM_AUTH_USER_GROUP ?? 'n8n-users';
 	private readonly adminGroup = process.env.N8N_SYSTEM_AUTH_ADMIN_GROUP ?? 'n8n-admins';
-	private readonly ownerUsername = process.env.N8N_SYSTEM_AUTH_OWNER_USERNAME ?? 'admin';
+	private readonly ownerUsername = process.env.N8N_SYSTEM_AUTH_OWNER_USERNAME ?? 'administrator';
 
 	constructor(
 		private readonly userRepository: UserRepository,
