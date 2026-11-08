@@ -51,7 +51,11 @@ ARG UV_VERSION=0.8.14
 
 # Build the Python environment against Debian/glibc, matching the final image.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates curl gzip \
+ && apt-get install -y --allow-downgrades --no-install-recommends \
+        python-3.13=3.13.18-6 \
+        libtinfo6=6.5+20250216-2+deb13u0+dhi5 \
+        libncursesw6=6.5+20250216-2+deb13u0+dhi5 \
+        ca-certificates curl gzip \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 RUN set -e; \
     case "$TARGETPLATFORM" in \
@@ -130,7 +134,10 @@ ENV NODE_ENV=production \
 
 # Match the Python interpreter used for the glibc virtual environment.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-venv \
+ && apt-get install -y --allow-downgrades --no-install-recommends \
+        python-3.13=3.13.18-6 \
+        libtinfo6=6.5+20250216-2+deb13u0+dhi5 \
+        libncursesw6=6.5+20250216-2+deb13u0+dhi5 \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
  && printf '%s\n' 'runner:x:1001:' >> /etc/group \
  && printf '%s\n' 'runner:x:1001:1001:runner:/home/runner:/bin/sh' >> /etc/passwd \
