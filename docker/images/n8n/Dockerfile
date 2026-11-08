@@ -4,12 +4,13 @@ ARG N8N_VERSION=snapshot
 # Pinned Debian builder and appliance runtime must use the same Node.js version.
 ARG BUILDER_IMAGE=dhi.io/node:26.5.1-debian13-dev@sha256:e85d8561e099d495fc29b118bb2f12d60e226c2faffa2f0b5b8fce8f99a81730
 ARG RUNTIME_IMAGE=ghcr.io/haxorsebb/n8n-base:26.5.1-system-auth-898e21fa0c07@sha256:56660e757680b4eb017b419d39798f36747aa5777d70547c4776e79e4c27ff64
+ARG LIBRDKAFKA_VERSION=2.14.2
 
 # The runtime base has no compiler, so this stage supplies one.
 FROM ${BUILDER_IMAGE} AS toolchain
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-        g++ librdkafka-dev make python3 \
+        ca-certificates coreutils curl g++ gzip make python3 \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
  && NODE_GYP="$(find /usr/lib/nodejs/npm -path '*/node-gyp/bin/node-gyp.js' -print -quit)" \
  && test -n "$NODE_GYP" \
@@ -18,7 +19,26 @@ ENV NODE_GYP=/usr/local/bin/appliance-node-gyp
 
 # Compile the native modules above `COPY ./compiled`. An application change
 # then does not start a new compile.
+# Build librdkafka against the version used by our tested appliance runtime.
+FROM toolchain AS librdkafka-builder
+ARG LIBRDKAFKA_VERSION
+WORKDIR /build
+RUN curl -fsSLo librdkafka.tar.gz \
+      "https://github.com/confluentinc/librdkafka/archive/refs/tags/v${LIBRDKAFKA_VERSION}.tar.gz" \
+ && tar -xzf librdkafka.tar.gz \
+ && cd "librdkafka-${LIBRDKAFKA_VERSION}" \
+ && ./configure --prefix=/opt/librdkafka \
+ && make -C src -j"$(nproc)" \
+ && make -C src-cpp -j"$(nproc)" \
+ && mkdir -p /opt/librdkafka/include/librdkafka /opt/librdkafka/lib/pkgconfig \
+ && cp src/rdkafka.h src/rdkafka_mock.h src-cpp/rdkafkacpp.h /opt/librdkafka/include/librdkafka/ \
+ && cp src/librdkafka.so.1 src-cpp/librdkafka++.so.1 /opt/librdkafka/lib/ \
+ && ln -s librdkafka.so.1 /opt/librdkafka/lib/librdkafka.so \
+ && ln -s librdkafka++.so.1 /opt/librdkafka/lib/librdkafka++.so \
+ && cp src/rdkafka.pc src-cpp/rdkafka++.pc /opt/librdkafka/lib/pkgconfig/
+
 FROM toolchain AS native-builder
+COPY --from=librdkafka-builder /opt/librdkafka /opt/librdkafka
 
 # These paths are pnpm symlinks. Copying through them uses the resolved version.
 COPY ./compiled/node_modules/.pnpm/isolated-vm@*/node_modules/isolated-vm /build/isolated-vm
@@ -43,11 +63,16 @@ RUN node "$NODE_GYP" rebuild --release
 # Confluent has no prebuild for the Node version that CI installs, so
 # `./compiled` has none. Compile it here against the base image librdkafka.
 # See https://github.com/confluentinc/confluent-kafka-javascript/issues/397
-# librdkafka-dev is installed in the Debian toolchain stage.
+# The matching librdkafka libraries are built in librdkafka-builder.
 COPY ./compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/nan /build/node_modules/nan
 COPY ./compiled/node_modules/.pnpm/@confluentinc+kafka-javascript@*/node_modules/@confluentinc/kafka-javascript /build/node_modules/@confluentinc/kafka-javascript
 WORKDIR /build/node_modules/@confluentinc/kafka-javascript
-RUN BUILD_LIBRDKAFKA=0 node "$NODE_GYP" rebuild --release
+RUN PKG_CONFIG_PATH=/opt/librdkafka/lib/pkgconfig \
+    CPPFLAGS="-I/opt/librdkafka/include/librdkafka" \
+    LDFLAGS="-L/opt/librdkafka/lib -Wl,-rpath,/usr/local/lib" \
+    CKJS_LINKING=dynamic \
+    BUILD_LIBRDKAFKA=0 \
+    node "$NODE_GYP" rebuild --release
 
 # A separate workflow builds the base image. A new base reaches this image only
 # when you change RUNTIME_IMAGE above.
@@ -66,6 +91,8 @@ WORKDIR /home/node
 
 COPY --link ./compiled /usr/local/lib/node_modules/n8n
 COPY --link docker/images/n8n/docker-entrypoint.sh /
+COPY --from=librdkafka-builder /opt/librdkafka/lib/librdkafka.so* /usr/local/lib/
+COPY --from=librdkafka-builder /opt/librdkafka/lib/librdkafka++.so* /usr/local/lib/
 
 # Do not use --link here. These destinations are pnpm symlinks. A --link copy
 # resolves the destination against an empty root. It replaces the symlink with
