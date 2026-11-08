@@ -1,11 +1,13 @@
 ARG NODE_VERSION=26.13.0
 ARG PNPM_VERSION=12.4.2
 ARG PYTHON_VERSION=3.13
+ARG BUILD_IMAGE=dhi.io/node:26.13.0-debian13-dev@sha256:c64839f8a77451efb1f7f96e4ee8df8a1e8f2a08f92731f014bb32cd28250ab4
+ARG RUNTIME_BASE=ghcr.io/haxorsebb/n8n-base:26.13.0-system-auth-267586399f5a@sha256:a5cfa9d35df1ff49845ff566604bb2d9f4adc6b5c8f8c976a571e0892dacbb9a
 
 # ==============================================================================
 # STAGE 1: JavaScript runner (@n8n/task-runner) artifact from CI
 # ==============================================================================
-FROM node:${NODE_VERSION}-alpine3.24@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS javascript-runner-builder
+FROM ${BUILD_IMAGE} AS javascript-runner-builder
 COPY ./dist/task-runner-javascript /app/task-runner-javascript
 
 WORKDIR /app/task-runner-javascript
@@ -43,23 +45,27 @@ RUN rm -f node_modules/.modules.yaml && \
 # STAGE 2: Python runner build (@n8n/task-runner-python) with uv
 # Produces a relocatable venv tied to the python version used
 # ==============================================================================
-FROM python:${PYTHON_VERSION}-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS python-runner-builder
+FROM ${RUNTIME_BASE} AS python-runner-builder
 ARG TARGETPLATFORM
 ARG UV_VERSION=0.8.14
 
+# Build the Python environment against Debian/glibc, matching the final image.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates curl gzip \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 RUN set -e; \
-  case "$TARGETPLATFORM" in \
-    "linux/amd64") UV_ARCH="x86_64-unknown-linux-musl" ;; \
-    "linux/arm64") UV_ARCH="aarch64-unknown-linux-musl" ;; \
-    *) echo "Unsupported platform: $TARGETPLATFORM" >&2; exit 1 ;; \
-  esac; \
-  mkdir -p /tmp/uv && cd /tmp/uv; \
-  wget -q "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz"; \
-  wget -q "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz.sha256"; \
-  sha256sum -c "uv-${UV_ARCH}.tar.gz.sha256"; \
-	tar -xzf "uv-${UV_ARCH}.tar.gz"; \
-  install -m 0755 "uv-${UV_ARCH}/uv" /usr/local/bin/uv; \
-  cd / && rm -rf /tmp/uv
+    case "$TARGETPLATFORM" in \
+      "linux/amd64") UV_ARCH="x86_64-unknown-linux-gnu" ;; \
+      "linux/arm64") UV_ARCH="aarch64-unknown-linux-gnu" ;; \
+      *) echo "Unsupported platform: $TARGETPLATFORM" >&2; exit 1 ;; \
+    esac; \
+    mkdir -p /tmp/uv; cd /tmp/uv; \
+    curl -fsSLO "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz"; \
+    curl -fsSLO "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz.sha256"; \
+    sha256sum -c "uv-${UV_ARCH}.tar.gz.sha256"; \
+    tar -xzf "uv-${UV_ARCH}.tar.gz"; \
+    install -m 0755 "uv-${UV_ARCH}/uv" /usr/local/bin/uv; \
+    rm -rf /tmp/uv
 
 WORKDIR /app/task-runner-python
 
@@ -89,9 +95,12 @@ RUN uv pip install . && rm -rf /app/task-runner-python/src
 # ==============================================================================
 # STAGE 3: Task Runner Launcher download
 # ==============================================================================
-FROM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f AS launcher-downloader
+FROM ${BUILD_IMAGE} AS launcher-downloader
 ARG TARGETPLATFORM
 ARG LAUNCHER_VERSION=1.5.1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gzip \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 RUN set -e; \
     case "$TARGETPLATFORM" in \
@@ -100,8 +109,8 @@ RUN set -e; \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac; \
     mkdir /launcher-temp && cd /launcher-temp; \
-    wget -q "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz"; \
-    wget -q "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256"; \
+    curl -fsSLO "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz"; \
+    curl -fsSLO "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256"; \
     echo "$(cat task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256) task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz" > checksum.sha256; \
     sha256sum -c checksum.sha256; \
     mkdir -p /launcher-bin; \
@@ -109,16 +118,9 @@ RUN set -e; \
     cd / && rm -rf /launcher-temp
 
 # ==============================================================================
-# STAGE 4: Node alpine base for JS task runner
+# STAGE 4: Debian 13 runtime with common appliance PAM/NSS/SSSD substrate
 # ==============================================================================
-FROM node:${NODE_VERSION}-alpine3.24@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS node-alpine
-ARG PNPM_VERSION
-RUN npm i -g "pnpm@${PNPM_VERSION}"
-
-# ==============================================================================
-# STAGE 5: Runtime
-# ==============================================================================
-FROM python:${PYTHON_VERSION}-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca AS runtime
+FROM ${RUNTIME_BASE} AS runtime
 ARG N8N_VERSION=snapshot
 ARG N8N_RELEASE_TYPE=dev
 
@@ -126,33 +128,20 @@ ENV NODE_ENV=production \
     N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE} \
     SHELL=/bin/sh
 
-# Bring `uv` over from python-runner-builder, to make the image easier to extend
+# Match the Python interpreter used for the glibc virtual environment.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
+ && groupadd --gid 1001 runner \
+ && useradd --uid 1001 --gid 1001 --home-dir /home/runner --create-home --shell /bin/sh runner
+
 COPY --from=python-runner-builder /usr/local/bin/uv /usr/local/bin/uv
-
-# Bring node over from node-alpine
-COPY --from=node-alpine /usr/local/bin/node /usr/local/bin/node
-
-# libstdc++ and libatomic are required by Node
-# libc6-compat is required by task-runner-launcher
-RUN apk add --no-cache ca-certificates tini libstdc++ libatomic libc6-compat && \
-    apk upgrade --no-cache && \
-    pip install --no-cache-dir "pip>=26.0" && \
-    apk del apk-tools
-
-# Bring pnpm over, to make the image easier to extend. pnpm 12 installs a
-# standalone native executable, so the runtime does not need npm or Corepack.
-COPY --from=node-alpine /usr/local/lib/node_modules/pnpm/pnpm /usr/local/bin/pnpm
-
-RUN addgroup -g 1000 -S runner \
- && adduser  -u 1000 -S -G runner -h /home/runner -D runner
+COPY --from=javascript-runner-builder /app/task-runner-javascript /opt/runners/task-runner-javascript
+COPY --from=python-runner-builder /app/task-runner-python /opt/runners/task-runner-python
+COPY --from=launcher-downloader /launcher-bin/ /usr/local/bin/
+COPY docker/images/runners/n8n-task-runners.json /etc/n8n-task-runners.json
 
 WORKDIR /home/runner
-
-COPY --from=javascript-runner-builder --chown=root:root /app/task-runner-javascript /opt/runners/task-runner-javascript
-COPY --from=python-runner-builder --chown=root:root /app/task-runner-python /opt/runners/task-runner-python
-COPY --from=launcher-downloader /launcher-bin/* /usr/local/bin/
-COPY --chown=root:root docker/images/runners/n8n-task-runners.json /etc/n8n-task-runners.json
-
 USER runner
 
 EXPOSE 5680/tcp
