@@ -132,8 +132,10 @@ ENV NODE_ENV=production \
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
- && groupadd --gid 1001 runner \
- && useradd --uid 1001 --gid 1001 --home-dir /home/runner --create-home --shell /bin/sh runner
+ && printf '%s\n' 'runner:x:1001:' >> /etc/group \
+ && printf '%s\n' 'runner:x:1001:1001:runner:/home/runner:/bin/sh' >> /etc/passwd \
+ && mkdir -p /home/runner \
+ && chown 1001:1001 /home/runner
 
 COPY --from=python-runner-builder /usr/local/bin/uv /usr/local/bin/uv
 COPY --from=javascript-runner-builder /app/task-runner-javascript /opt/runners/task-runner-javascript
