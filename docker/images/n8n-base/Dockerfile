@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG APP_BASE_IMAGE=ghcr.io/haxorsebb/n8n-appliance-app-base:debian13-66f5d6635e17@sha256:5c60166ad2daa94f48f9af120fdbcba11cc7e7759f857b5237fc4ecf258d69de
-ARG NODE_DONOR_IMAGE=dhi.io/node:26.5.1-debian13-dev@sha256:e85d8561e099d495fc29b118bb2f12d60e226c2faffa2f0b5b8fce8f99a81730
+ARG NODE_DONOR_IMAGE=dhi.io/node:26.13.0-debian13-dev@sha256:c64839f8a77451efb1f7f96e4ee8df8a1e8f2a08f92731f014bb32cd28250ab4
 
 FROM ${NODE_DONOR_IMAGE} AS node-donor
 
