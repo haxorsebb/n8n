@@ -14,6 +14,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
  && NODE_GYP="$(find /usr/lib/nodejs/npm -path '*/node-gyp/bin/node-gyp.js' -print -quit)" \
  && test -n "$NODE_GYP" \
+ && mkdir -p /usr/local/bin \
  && ln -s "$NODE_GYP" /usr/local/bin/appliance-node-gyp
 ENV NODE_GYP=/usr/local/bin/appliance-node-gyp
 
