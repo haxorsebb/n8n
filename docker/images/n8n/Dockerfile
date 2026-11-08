@@ -1,9 +1,9 @@
-ARG NODE_VERSION=26.5.1
+ARG NODE_VERSION=26.13.0
 ARG N8N_VERSION=snapshot
 
 # Pinned Debian builder and appliance runtime must use the same Node.js version.
-ARG BUILDER_IMAGE=dhi.io/node:26.5.1-debian13-dev@sha256:e85d8561e099d495fc29b118bb2f12d60e226c2faffa2f0b5b8fce8f99a81730
-ARG RUNTIME_IMAGE=ghcr.io/haxorsebb/n8n-base:26.5.1-system-auth-898e21fa0c07@sha256:56660e757680b4eb017b419d39798f36747aa5777d70547c4776e79e4c27ff64
+ARG BUILDER_IMAGE=dhi.io/node:26.13.0-debian13-dev@sha256:c64839f8a77451efb1f7f96e4ee8df8a1e8f2a08f92731f014bb32cd28250ab4
+ARG RUNTIME_IMAGE=ghcr.io/haxorsebb/n8n-base:26.13.0-system-auth-267586399f5a@sha256:a5cfa9d35df1ff49845ff566604bb2d9f4adc6b5c8f8c976a571e0892dacbb9a
 ARG LIBRDKAFKA_VERSION=2.14.2
 
 # The runtime base has no compiler, so this stage supplies one.
