@@ -40,14 +40,16 @@ RUN curl -fsSLo librdkafka.tar.gz \
 
 # Bundle the published Paperless-ngx community node at image build time.
 # No npm, package installer or runtime registry access is needed on the appliance.
-# Use Wait for Consumption=false with the upload-only Paperless service identity.
+# Patch the pinned upload node to return task/document IDs without document-read access.
 FROM toolchain AS paperless-community-node-builder
 ARG PAPERLESS_NODE_VERSION=0.4.2
 WORKDIR /opt/n8n-paperless-nodes
+COPY docker/images/n8n/patch-paperless-upload.cjs /tmp/patch-paperless-upload.cjs
 RUN node /usr/lib/nodejs/npm/bin/npm-cli.js install \
       --no-save --no-audit --no-fund --ignore-scripts --legacy-peer-deps \
       --omit=dev "@iamfj/n8n-nodes-paperless-ngx@${PAPERLESS_NODE_VERSION}" \
- && test -f node_modules/@iamfj/n8n-nodes-paperless-ngx/dist/nodes/PaperlessNgx/PaperlessNgx.node.js
+ && test -f node_modules/@iamfj/n8n-nodes-paperless-ngx/dist/nodes/PaperlessNgx/PaperlessNgx.node.js \
+ && node /tmp/patch-paperless-upload.cjs
 
 FROM toolchain AS native-builder
 COPY --from=librdkafka-builder /opt/librdkafka /opt/librdkafka
