@@ -38,6 +38,17 @@ RUN curl -fsSLo librdkafka.tar.gz \
  && ln -s librdkafka++.so.1 /opt/librdkafka/lib/librdkafka++.so \
  && cp src/rdkafka.pc src-cpp/rdkafka++.pc /opt/librdkafka/lib/pkgconfig/
 
+# Bundle the reviewed Paperless-ngx community node at image build time.
+# No npm, package installer or runtime registry access is needed on the appliance.
+# Node.js native FormData handles document uploads in this version of the node.
+FROM toolchain AS paperless-community-node-builder
+ARG PAPERLESS_NODE_VERSION=0.1.2
+WORKDIR /opt/n8n-paperless-nodes
+RUN node /usr/lib/nodejs/npm/bin/npm-cli.js install \
+      --no-save --no-audit --no-fund --ignore-scripts --legacy-peer-deps \
+      --omit=dev "@axnic/n8n-nodes-paperless-ngx@${PAPERLESS_NODE_VERSION}" \
+ && test -f node_modules/@axnic/n8n-nodes-paperless-ngx/dist/nodes/Paperless/Paperless.node.js
+
 FROM toolchain AS native-builder
 COPY --from=librdkafka-builder /opt/librdkafka /opt/librdkafka
 
@@ -85,12 +96,16 @@ ARG IMAGE_DESCRIPTION="Workflow Automation Tool"
 ENV NODE_ENV=production
 ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
 ENV SHELL=/bin/sh
+# Load this image-owned extension without allowing arbitrary npm community installs.
+ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-paperless-nodes
+ENV NODE_PATH=/usr/local/lib/node_modules/n8n/node_modules
 # Restrict GraphicsMagick to its commonly used coder set.
 ENV MAGICK_CODER_STABILITY=PRIMARY
 
 WORKDIR /home/node
 
 COPY --link ./compiled /usr/local/lib/node_modules/n8n
+COPY --from=paperless-community-node-builder --chown=node:node /opt/n8n-paperless-nodes /opt/n8n-paperless-nodes
 COPY --link docker/images/n8n/docker-entrypoint.sh /
 COPY --from=librdkafka-builder /opt/librdkafka/lib/librdkafka.so* /usr/local/lib/
 COPY --from=librdkafka-builder /opt/librdkafka/lib/librdkafka++.so* /usr/local/lib/
