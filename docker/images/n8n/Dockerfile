@@ -38,16 +38,16 @@ RUN curl -fsSLo librdkafka.tar.gz \
  && ln -s librdkafka++.so.1 /opt/librdkafka/lib/librdkafka++.so \
  && cp src/rdkafka.pc src-cpp/rdkafka++.pc /opt/librdkafka/lib/pkgconfig/
 
-# Bundle the reviewed Paperless-ngx community node at image build time.
+# Bundle the published Paperless-ngx community node at image build time.
 # No npm, package installer or runtime registry access is needed on the appliance.
-# Node.js native FormData handles document uploads in this version of the node.
+# Use Wait for Consumption=false with the upload-only Paperless service identity.
 FROM toolchain AS paperless-community-node-builder
-ARG PAPERLESS_NODE_VERSION=0.1.2
+ARG PAPERLESS_NODE_VERSION=0.4.2
 WORKDIR /opt/n8n-paperless-nodes
 RUN node /usr/lib/nodejs/npm/bin/npm-cli.js install \
       --no-save --no-audit --no-fund --ignore-scripts --legacy-peer-deps \
-      --omit=dev "@axnic/n8n-nodes-paperless-ngx@${PAPERLESS_NODE_VERSION}" \
- && test -f node_modules/@axnic/n8n-nodes-paperless-ngx/dist/nodes/Paperless/Paperless.node.js
+      --omit=dev "@iamfj/n8n-nodes-paperless-ngx@${PAPERLESS_NODE_VERSION}" \
+ && test -f node_modules/@iamfj/n8n-nodes-paperless-ngx/dist/nodes/PaperlessNgx/PaperlessNgx.node.js
 
 FROM toolchain AS native-builder
 COPY --from=librdkafka-builder /opt/librdkafka /opt/librdkafka
